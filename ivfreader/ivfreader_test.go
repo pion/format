@@ -5,10 +5,12 @@ package ivfreader
 
 import (
 	"bytes"
+	"encoding/binary"
 	"io"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // buildIVFContainer takes frames and prepends valid IVF file header.
@@ -181,4 +183,25 @@ func TestIVFReader_EOFWhenNoFramesLeft(t *testing.T) {
 	_, _, err = reader.ParseNextFrame()
 
 	assert.Equal(io.EOF, err)
+}
+
+func TestIVFReaderFrameSizeLimit(t *testing.T) {
+	frame := make([]byte, 14)
+	binary.LittleEndian.PutUint32(frame, 2)
+	for _, limit := range []uint32{1, 2} {
+		reader, _, err := NewWith(buildIVFContainer(&frame), WithMaxFrameSize(limit))
+		require.NoError(t, err)
+		payload, _, err := reader.ParseNextFrame()
+		if limit == 1 {
+			require.ErrorIs(t, err, errFrameTooLarge)
+		} else {
+			require.NoError(t, err)
+			require.Len(t, payload, 2)
+		}
+	}
+	binary.LittleEndian.PutUint32(frame, 0xffffffff)
+	reader, _, err := NewWith(buildIVFContainer(&frame))
+	require.NoError(t, err)
+	_, _, err = reader.ParseNextFrame()
+	require.ErrorIs(t, err, errFrameTooLarge)
 }

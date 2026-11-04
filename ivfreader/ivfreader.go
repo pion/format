@@ -18,6 +18,7 @@ const (
 )
 
 var (
+	errFrameTooLarge         = errors.New("IVF frame exceeds size limit")
 	errNilStream             = errors.New("stream is nil")
 	errIncompleteFrameHeader = errors.New("incomplete frame header")
 	errIncompleteFrameData   = errors.New("incomplete frame data")
@@ -55,17 +56,32 @@ type IVFReader struct {
 	bytesReadSuccesfully int64
 	timebaseDenominator  uint32
 	timebaseNumerator    uint32
+	maxFrameSize         uint32
 }
 
-// NewWith returns a new IVF reader and IVF file header
-// with an io.Reader input.
-func NewWith(stream io.Reader) (*IVFReader, *IVFFileHeader, error) {
+// Option configures an IVF reader.
+type Option func(*IVFReader)
+
+// WithMaxFrameSize sets the maximum compressed frame size in bytes.
+// The default is 64 MiB. Zero rejects all nonempty frames.
+func WithMaxFrameSize(size uint32) Option {
+	return func(r *IVFReader) { r.maxFrameSize = size }
+}
+
+// NewWith returns a new IVF reader and IVF file header with an io.Reader input.
+// Frames larger than 64 MiB are rejected unless WithMaxFrameSize overrides the limit.
+func NewWith(stream io.Reader, options ...Option) (*IVFReader, *IVFFileHeader, error) {
 	if stream == nil {
 		return nil, nil, errNilStream
 	}
 
 	reader := &IVFReader{
-		stream: stream,
+		stream:       stream,
+		maxFrameSize: 64 << 20,
+	}
+
+	for _, option := range options {
+		option(reader)
 	}
 
 	header, err := reader.parseFileHeader()
@@ -113,6 +129,9 @@ func (i *IVFReader) ParseNextFrame() ([]byte, *IVFFrameHeader, error) {
 		Timestamp: i.ptsToTimestamp(pts),
 	}
 
+	if header.FrameSize > i.maxFrameSize || uint64(header.FrameSize) > uint64(^uint(0)>>1) {
+		return nil, nil, errFrameTooLarge
+	}
 	payload := make([]byte, header.FrameSize)
 	bytesRead, err = io.ReadFull(i.stream, payload)
 	if errors.Is(err, io.ErrUnexpectedEOF) {
