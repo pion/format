@@ -935,3 +935,10 @@ func TestOpusTagsOversizedLengths(t *testing.T) {
 		}
 	}
 }
+
+func TestOggEntryPointValidation(t *testing.T) {
+	_, err := NewWithOptions(nil)
+	assert.ErrorIs(t, err, errNilStream)
+	_, err = ParseOpusHead(make([]byte, 19))
+	assert.ErrorIs(t, err, errBadIDPagePayloadSignature)
+}
