@@ -8,6 +8,7 @@ package rtpdump
 import (
 	"encoding/binary"
 	"errors"
+	"math"
 	"net"
 	"time"
 )
@@ -88,6 +89,10 @@ type Packet struct {
 
 // Marshal encodes the Packet as binary.
 func (p Packet) Marshal() ([]byte, error) {
+	if len(p.Payload) > math.MaxUint16-pktHeaderLen {
+		return nil, errMalformed
+	}
+
 	packetLength := len(p.Payload)
 	if p.IsRTCP {
 		packetLength = 0

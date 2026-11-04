@@ -5,6 +5,7 @@ package rtpdump
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"io"
 	"net"
@@ -281,5 +282,17 @@ func TestReader(t *testing.T) { //nolint:maintidx
 			assert.NoError(t, nextErr, test.Name)
 		}
 		assert.Equal(t, test.WantPackets, packets, test.Name)
+	}
+}
+
+func TestReaderRejectsShortPacketHeaderLength(t *testing.T) {
+	for length := range uint16(pktHeaderLen) {
+		data := make([]byte, pktHeaderLen+65535)
+		binary.BigEndian.PutUint16(data, length)
+		input := bytes.NewReader(data)
+		reader := &Reader{reader: input}
+		_, err := reader.Next()
+		assert.ErrorIs(t, err, errMalformed)
+		assert.Equal(t, 65535, input.Len())
 	}
 }

@@ -102,3 +102,19 @@ func TestPacketRoundTrip(t *testing.T) {
 		assert.Equal(t, test.Packet, pkt)
 	}
 }
+
+func TestPacketPayloadLengthBoundary(t *testing.T) {
+	for _, size := range []int{65527, 65528, 65536} {
+		packet := Packet{Payload: make([]byte, size)}
+		raw, err := packet.Marshal()
+		if size > 65527 {
+			assert.Error(t, err)
+
+			continue
+		}
+		assert.NoError(t, err)
+		var decoded Packet
+		assert.NoError(t, decoded.Unmarshal(raw))
+		assert.Equal(t, packet.Payload, decoded.Payload)
+	}
+}
