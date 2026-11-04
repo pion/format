@@ -5,7 +5,6 @@
 package h265writer
 
 import (
-	"bytes"
 	"encoding/binary"
 	"io"
 	"os"
@@ -122,11 +121,7 @@ func checkAggregationPacketForKeyFrame(data []byte) bool {
 		}
 
 		// Read NAL unit size (2 bytes in network byte order)
-		var naluSize uint16
-		buf := bytes.NewReader(data[offset : offset+2])
-		if err := binary.Read(buf, binary.BigEndian, &naluSize); err != nil {
-			break
-		}
+		naluSize := binary.BigEndian.Uint16(data[offset : offset+2])
 		offset += 2
 
 		if offset+int(naluSize) > len(data) {
