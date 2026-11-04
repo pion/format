@@ -68,6 +68,10 @@ func ParseOpusHead(payload []byte) (*OggHeader, error) {
 		return nil, errBadIDPageLength
 	}
 
+	if sig, ok := opusPayloadSignature(payload); !ok || sig != HeaderOpusID {
+		return nil, fmt.Errorf("%w: expected OpusHead, got %s", errBadIDPagePayloadSignature, sig)
+	}
+
 	header := parseBasicHeaderFields(payload)
 	if err := parseChannelMapping(header, payload); err != nil {
 		return nil, err
@@ -138,6 +142,10 @@ func NewWith(in io.Reader) (*OggReader, *OggHeader, error) {
 
 // NewWithOptions returns a new Ogg reader.
 func NewWithOptions(in io.Reader, options ...Option) (*OggReader, error) {
+	if in == nil {
+		return nil, errNilStream
+	}
+
 	reader := &OggReader{
 		stream:        in,
 		checksumTable: generateChecksumTable(),
@@ -164,14 +172,9 @@ func WithDoChecksum(doChecksum bool) Option {
 }
 
 func newWith(in io.Reader, doChecksum bool) (*OggReader, *OggHeader, error) {
-	if in == nil {
-		return nil, nil, errNilStream
-	}
-
-	reader := &OggReader{
-		stream:        in,
-		checksumTable: generateChecksumTable(),
-		doChecksum:    doChecksum,
+	reader, err := NewWithOptions(in, WithDoChecksum(doChecksum))
+	if err != nil {
+		return nil, nil, err
 	}
 
 	header, err := reader.readOpusHeader()
@@ -188,33 +191,20 @@ func (o *OggReader) readOpusHeader() (*OggHeader, error) {
 		return nil, err
 	}
 
-	if err := validateOpusPageHeader(pageHeader, payload); err != nil {
+	if err := validateOpusPageHeader(pageHeader); err != nil {
 		return nil, err
 	}
 
-	header := parseBasicHeaderFields(payload)
-	if err := parseChannelMapping(header, payload); err != nil {
-		return nil, err
-	}
-
-	return header, nil
+	return ParseOpusHead(payload)
 }
 
-func validateOpusPageHeader(pageHeader *OggPageHeader, payload []byte) error {
+func validateOpusPageHeader(pageHeader *OggPageHeader) error {
 	if string(pageHeader.sig[:]) != pageHeaderSignature {
 		return errBadIDPageSignature
 	}
 
 	if pageHeader.headerType != pageHeaderTypeBeginningOfStream {
 		return errBadIDPageType
-	}
-
-	if len(payload) < idPageBasePayloadLength {
-		return errBadIDPageLength
-	}
-
-	if sig, ok := opusPayloadSignature(payload); !ok || sig != HeaderOpusID {
-		return fmt.Errorf("%w: expected OpusHead, got %s", errBadIDPagePayloadSignature, sig)
 	}
 
 	return nil
