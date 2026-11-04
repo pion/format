@@ -103,12 +103,12 @@ func NewWith(out io.Writer, opts ...Option) (*IVFWriter, error) {
 	if writer.codec == codecUnset {
 		writer.codec = codecVP8
 	}
-	if err := writer.writeHeader(); err != nil {
-		return nil, err
+	if writer.timebaseDenominator == 0 || writer.timebaseNumerator == 0 {
+		return nil, errInvalidMediaTimebase
 	}
 
-	if writer.timebaseDenominator == 0 {
-		return nil, errInvalidMediaTimebase
+	if err := writer.writeHeader(); err != nil {
+		return nil, err
 	}
 
 	return writer, nil
