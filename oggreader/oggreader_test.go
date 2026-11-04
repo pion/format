@@ -920,3 +920,18 @@ func makeOpusHeadWithChannelMapping(channels uint8, mappingFamily uint8) []byte 
 
 	return pack
 }
+
+func TestOpusTagsOversizedLengths(t *testing.T) {
+	for _, offset := range []int{8, 12, 16} {
+		for _, length := range []uint32{0x7fffffff, 0x80000000, 0xffffffff} {
+			payload := make([]byte, 20)
+			copy(payload, "OpusTags")
+			if offset == 16 {
+				binary.LittleEndian.PutUint32(payload[12:], 1)
+			}
+			binary.LittleEndian.PutUint32(payload[offset:], length)
+			_, err := ParseOpusTags(payload)
+			assert.Error(t, err)
+		}
+	}
+}
