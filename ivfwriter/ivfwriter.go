@@ -71,7 +71,7 @@ func New(fileName string, opts ...Option) (*IVFWriter, error) {
 	}
 	writer, err := NewWith(file, opts...)
 	if err != nil {
-		return nil, err
+		return nil, errors.Join(err, file.Close())
 	}
 	writer.ioWriter = file
 
@@ -314,7 +314,7 @@ func (i *IVFWriter) writeAV1(packet *rtp.Packet, timestamp uint64) error {
 }
 
 // Close stops the recording.
-func (i *IVFWriter) Close() error {
+func (i *IVFWriter) Close() (err error) {
 	if i.ioWriter == nil {
 		// Returns no error as it may be convenient to call
 		// Close() multiple times
@@ -322,6 +322,9 @@ func (i *IVFWriter) Close() error {
 	}
 
 	defer func() {
+		if closer, ok := i.ioWriter.(io.Closer); ok {
+			err = errors.Join(err, closer.Close())
+		}
 		i.ioWriter = nil
 	}()
 
@@ -335,10 +338,6 @@ func (i *IVFWriter) Close() error {
 		if _, err := ws.Write(buff); err != nil {
 			return err
 		}
-	}
-
-	if closer, ok := i.ioWriter.(io.Closer); ok {
-		return closer.Close()
 	}
 
 	return nil
