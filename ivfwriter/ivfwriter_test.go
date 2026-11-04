@@ -617,3 +617,12 @@ func TestIVFWriter_BackwardCompatibility(t *testing.T) {
 		uint64(data[frame2Offset+10])<<48 | uint64(data[frame2Offset+11])<<56
 	assert.Equal(t, uint64(33), pts2, "Legacy mode: PTS should be 33 (1000ms * 1/30)")
 }
+
+func TestIVFWriterRejectsInvalidTimebaseBeforeWriting(t *testing.T) {
+	for _, rate := range [][2]uint32{{0, 30}, {1, 0}, {0, 0}} {
+		var out bytes.Buffer
+		_, err := NewWith(&out, WithFrameRate(rate[0], rate[1]))
+		assert.ErrorIs(t, err, errInvalidMediaTimebase)
+		assert.Empty(t, out.Bytes())
+	}
+}
