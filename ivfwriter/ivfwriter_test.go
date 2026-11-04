@@ -6,11 +6,14 @@ package ivfwriter
 import (
 	"bytes"
 	"io"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/pion/rtp"
 	"github.com/pion/rtp/codecs"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type ivfWriterPacketTest struct {
@@ -625,4 +628,57 @@ func TestIVFWriterRejectsInvalidTimebaseBeforeWriting(t *testing.T) {
 		assert.ErrorIs(t, err, errInvalidMediaTimebase)
 		assert.Empty(t, out.Bytes())
 	}
+}
+
+type failingSeekCloser struct {
+	bytes.Buffer
+	seekErr, writeErr, closeErr error
+	closed                      bool
+}
+
+func (s *failingSeekCloser) Seek(int64, int) (int64, error) { return 0, s.seekErr }
+func (s *failingSeekCloser) Write(p []byte) (int, error) {
+	if s.writeErr != nil {
+		return 0, s.writeErr
+	}
+
+	return s.Buffer.Write(p)
+}
+
+func (s *failingSeekCloser) Close() error {
+	s.closed = true
+
+	return s.closeErr
+}
+
+func TestIVFWriterCloseAfterHeaderFailure(t *testing.T) {
+	boom, closeErr := io.ErrUnexpectedEOF, io.ErrClosedPipe
+	for _, seek := range []bool{false, true} {
+		sink := &failingSeekCloser{closeErr: closeErr}
+		if seek {
+			sink.seekErr = boom
+		} else {
+			sink.writeErr = boom
+		}
+		writer := &IVFWriter{ioWriter: sink}
+		err := writer.Close()
+		require.ErrorIs(t, err, boom)
+		require.ErrorIs(t, err, closeErr)
+		require.True(t, sink.closed)
+		require.NoError(t, writer.Close())
+	}
+}
+
+func TestIVFWriterNewClosesFailedFile(t *testing.T) {
+	var file *os.File
+	boom := io.ErrUnexpectedEOF
+	_, err := New(filepath.Join(t.TempDir(), "video.ivf"), func(w *IVFWriter) error {
+		var ok bool
+		file, ok = w.ioWriter.(*os.File)
+		require.True(t, ok)
+
+		return boom
+	})
+	require.ErrorIs(t, err, boom)
+	require.ErrorIs(t, file.Close(), os.ErrClosed)
 }
